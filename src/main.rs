@@ -8,16 +8,26 @@ use rusttype::{Font, Scale};
 use std::path::Path;
 use anyhow::Context;
 use ordered_float::OrderedFloat;
+use std::io::Write;
+use std::fs::File;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "image")]
 struct Options {
     #[structopt(short = "i", long)]
-    filename: String,
+    input_filename: String,
     #[structopt(short = "w", long)]
     output_width: u32,
     #[structopt(short = "f", long)]
     font_filename: String,
+    #[structopt(short, long)]
+    output_filename: Option<String>,
+    
+    #[structopt(short, long, default_value = "1.0")]
+    contrast: f32,
+    #[structopt(short, long, default_value = "1.0")]
+    gamma: f32,
+    
 }
 
 fn main() {
@@ -30,7 +40,7 @@ fn main() {
     }
 }
 fn run(options: Options) -> anyhow::Result<()> {
-    let image = Reader::open(Path::new(&options.filename))
+    let image = Reader::open(Path::new(&options.input_filename))
         .context("Failed to open file!")?
         .decode()?;
     let new_width = options.output_width;
@@ -41,13 +51,20 @@ fn run(options: Options) -> anyhow::Result<()> {
     let new_image = image::imageops::resize(&image, new_width * 3, new_height * 3, FilterType::Triangle);
     let grayscale = image::imageops::grayscale(&new_image);
     
+    let stdout = std::io::stdout();
+
+    let out_buffer: Box<dyn Write> = match options.output_filename {
+        Some(o) => Box::new(File::create(Path::new(&o))?),
+        None => Box::new(stdout)
+    };
     // TODO
     let path = std::path::Path::new(&options.font_filename);
     let data = std::fs::read(path).context("Failed to open the font file!")?;
     let font: Font = Font::try_from_vec(data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
     let intensities = char_intensities((32u8..127u8).map(|x| x as char), font)?;
-    asciify(new_width, new_height, grayscale, intensities);
+    asciify(out_buffer, new_width, new_height, grayscale, intensities, options.contrast, options.gamma)?;
+    
     Ok(())
 }
 
@@ -182,7 +199,7 @@ fn avg_intensity(image: &image::GrayImage, x1: u32, y1: u32, x2: u32, y2: u32) -
     s as f32 / ((x2 + 1 - x1) * (y2 + 1 - y1)) as f32 / 256.
 }
 
-fn asciify(new_width: u32, new_height: u32, new_image: image::GrayImage, char_intensities: CharIntensities) {
+fn asciify(mut buffer: Box<dyn Write>, new_width: u32, new_height: u32, new_image: image::GrayImage, char_intensities: CharIntensities, contrast: f32, gamma: f32) -> anyhow::Result<()> {
     //let mut maximum: f32 = 0.;
     //let mut minimum: f32 = std::f32::MAX;
     
@@ -203,7 +220,7 @@ fn asciify(new_width: u32, new_height: u32, new_image: image::GrayImage, char_in
             let a = &mut intensities[(i + j * new_width) as usize];
             //let normalised = 1. - (intensities[i as usize][j as usize] - minimum) / (maximum - minimum);
             a.apply(|x: f32| {
-                let f: f32 = 1.12 * x.powf(0.8) + 0.06;
+                let f: f32 = contrast * (x.powf(gamma) - 0.5) + 0.5;
                 f.max(0.0).min(1.0)
             });
             //a = a.max(0.).min(1.0);
@@ -211,8 +228,9 @@ fn asciify(new_width: u32, new_height: u32, new_image: image::GrayImage, char_in
                 .iter()
                 .min_by_key(|(_, x)| OrderedFloat(a.distance(&x)))
                 .unwrap_or(&(' ', Intensity::default())).0; // todo
-            print!("{}", next_char);
+            buffer.write(&[next_char as u8])?;
         }
-        println!();
+        buffer.write(b"\n")?;
     }
+    Ok(())
 }
