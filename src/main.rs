@@ -1,15 +1,14 @@
-//
-use structopt::StructOpt;
+use image::imageops::FilterType;
 use image::io::Reader;
 use image::GenericImageView;
-use image::imageops::FilterType;
 use rusttype::{Font, Scale};
+use structopt::StructOpt;
 
-use std::path::Path;
 use anyhow::Context;
 use ordered_float::OrderedFloat;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "image")]
@@ -22,12 +21,11 @@ struct Options {
     font_filename: String,
     #[structopt(short, long)]
     output_filename: Option<String>,
-    
+
     #[structopt(short, long, default_value = "1.0")]
     contrast: f32,
     #[structopt(short, long, default_value = "1.0")]
     gamma: f32,
-    
 }
 
 fn main() {
@@ -48,14 +46,15 @@ fn run(options: Options) -> anyhow::Result<()> {
     println!("{} {}", new_width, new_height);
 
     println!("Resizing image");
-    let new_image = image::imageops::resize(&image, new_width * 3, new_height * 3, FilterType::Triangle);
+    let new_image =
+        image::imageops::resize(&image, new_width * 3, new_height * 3, FilterType::Triangle);
     let grayscale = image::imageops::grayscale(&new_image);
-    
+
     let stdout = std::io::stdout();
 
     let out_buffer: Box<dyn Write> = match options.output_filename {
         Some(o) => Box::new(File::create(Path::new(&o))?),
-        None => Box::new(stdout)
+        None => Box::new(stdout),
     };
     // TODO
     let path = std::path::Path::new(&options.font_filename);
@@ -63,8 +62,16 @@ fn run(options: Options) -> anyhow::Result<()> {
     let font: Font = Font::try_from_vec(data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
     let intensities = char_intensities((32u8..127u8).map(|x| x as char), font)?;
-    asciify(out_buffer, new_width, new_height, grayscale, intensities, options.contrast, options.gamma)?;
-    
+    asciify(
+        out_buffer,
+        new_width,
+        new_height,
+        grayscale,
+        intensities,
+        options.contrast,
+        options.gamma,
+    )?;
+
     Ok(())
 }
 
@@ -79,7 +86,7 @@ struct Intensity {
     right: f32,
     top: f32,
     bottom: f32,
-    middle: f32
+    middle: f32,
 }
 impl Intensity {
     fn distance(&self, other: &Intensity) -> f32 {
@@ -99,33 +106,36 @@ impl Intensity {
 }
 type CharIntensities = Vec<(char, Intensity)>;
 
-fn char_intensities(chars: impl IntoIterator<Item = char>, font: Font) -> anyhow::Result<CharIntensities> {
+fn char_intensities(
+    chars: impl IntoIterator<Item = char>,
+    font: Font,
+) -> anyhow::Result<CharIntensities> {
     let height: u32 = 36; // TODO fix
 
     // x = y means uniform scale
-    let scale = Scale { x: height as f32, y: height as f32 };
+    let scale = Scale {
+        x: height as f32,
+        y: height as f32,
+    };
 
     let mut maximum: f32 = 0.;
     let mut intensities: CharIntensities = Vec::new();
-    
+
     for character in chars {
         let glyph = font.glyph(character);
         let positioned = glyph
             .scaled(scale)
             .positioned(rusttype::point(0., font.v_metrics(scale).ascent));
 
-        
-        let width = (positioned.position().x 
-            + positioned.unpositioned().h_metrics().advance_width)
+        let width = (positioned.position().x + positioned.unpositioned().h_metrics().advance_width)
             .round() as u32;
-
 
         let side_width = width * 1 / 3;
         let top_height = height * 1 / 3;
 
         if let Some(bounding_box) = positioned.pixel_bounding_box() {
             let mut intensity = Intensity::default();
-        
+
             positioned.draw(|x, y, v| {
                 //let v = (2. * (v - 0.5) + 0.5).min(0.).max(1.);
                 let x = x as i32 + bounding_box.min.x;
@@ -158,12 +168,13 @@ fn char_intensities(chars: impl IntoIterator<Item = char>, font: Font) -> anyhow
             intensity.right /= (side_width * height) as f32;
             intensity.middle /= ((width - side_width * 2) * (height - top_height * 2)) as f32;
 
-            maximum = maximum.max(intensity.bottom)
+            maximum = maximum
+                .max(intensity.bottom)
                 .max(intensity.top)
                 .max(intensity.left)
                 .max(intensity.right)
                 .max(intensity.middle);
-        
+
             intensities.push((character, intensity));
         }
     }
@@ -174,18 +185,21 @@ fn char_intensities(chars: impl IntoIterator<Item = char>, font: Font) -> anyhow
         pair.1.left /= maximum;
         pair.1.right /= maximum;
         pair.1.middle /= maximum;
-        
+
         // pixels with more intensity are darker -- 0. = darkest, 1. = lightest.
         pair.1.apply(|x| 1. - x);
     }
     // "a string".chars() does not have a space
-    intensities.push((' ', Intensity {
-        bottom: 1.,
-        top: 1.,
-        left: 1.,
-        right: 1.,
-        middle: 1.
-    }));
+    intensities.push((
+        ' ',
+        Intensity {
+            bottom: 1.,
+            top: 1.,
+            left: 1.,
+            right: 1.,
+            middle: 1.,
+        },
+    ));
     Ok(intensities)
 }
 
@@ -199,11 +213,17 @@ fn avg_intensity(image: &image::GrayImage, x1: u32, y1: u32, x2: u32, y2: u32) -
     s as f32 / ((x2 + 1 - x1) * (y2 + 1 - y1)) as f32 / 256.
 }
 
-fn asciify(mut buffer: Box<dyn Write>, new_width: u32, new_height: u32, new_image: image::GrayImage, char_intensities: CharIntensities, contrast: f32, gamma: f32) -> anyhow::Result<()> {
-    //let mut maximum: f32 = 0.;
-    //let mut minimum: f32 = std::f32::MAX;
-    
-    let mut intensities: Vec<Intensity> = vec![Intensity::default(); (new_height * new_width) as usize];
+fn asciify(
+    mut buffer: Box<dyn Write>,
+    new_width: u32,
+    new_height: u32,
+    new_image: image::GrayImage,
+    char_intensities: CharIntensities,
+    contrast: f32,
+    gamma: f32,
+) -> anyhow::Result<()> {
+    let mut intensities: Vec<Intensity> =
+        vec![Intensity::default(); (new_height * new_width) as usize];
     for j in 0..new_height {
         for i in 0..new_width {
             let int = &mut intensities[(i + j * new_width) as usize];
@@ -218,16 +238,15 @@ fn asciify(mut buffer: Box<dyn Write>, new_width: u32, new_height: u32, new_imag
     for j in 0..new_height {
         for i in 0..new_width {
             let a = &mut intensities[(i + j * new_width) as usize];
-            //let normalised = 1. - (intensities[i as usize][j as usize] - minimum) / (maximum - minimum);
             a.apply(|x: f32| {
                 let f: f32 = contrast * (x.powf(gamma) - 0.5) + 0.5;
                 f.max(0.0).min(1.0)
             });
-            //a = a.max(0.).min(1.0);
             let next_char = char_intensities
                 .iter()
                 .min_by_key(|(_, x)| OrderedFloat(a.distance(&x)))
-                .unwrap_or(&(' ', Intensity::default())).0; // todo
+                .unwrap_or(&(' ', Intensity::default()))
+                .0; // todo
             buffer.write(&[next_char as u8])?;
         }
         buffer.write(b"\n")?;
