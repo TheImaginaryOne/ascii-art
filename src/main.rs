@@ -1,5 +1,6 @@
 mod ascii_generation;
 mod intensity;
+mod text_write;
 
 use image::io::Reader;
 use image::GenericImageView;
@@ -8,11 +9,11 @@ use structopt::StructOpt;
 
 use anyhow::Context;
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 use ascii_generation::asciify;
 use intensity::char_intensities;
+use text_write::{TextWrite, StdTextWriter, TextWriteError};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "image")]
@@ -50,9 +51,9 @@ fn run(options: Options) -> anyhow::Result<()> {
     println!("{} {}", new_width, new_height);
     let stdout = std::io::stdout();
 
-    let out_buffer: Box<dyn Write> = match options.output_filename {
-        Some(o) => Box::new(File::create(Path::new(&o))?),
-        None => Box::new(stdout),
+    let mut out_buffer: Box<dyn TextWrite<TextWriteError>> = match options.output_filename {
+        Some(o) => Box::new(StdTextWriter::new(File::create(Path::new(&o))?)),
+        None => Box::new(StdTextWriter::new(stdout)),
     };
     // TODO
     let path = std::path::Path::new(&options.font_filename);
@@ -61,7 +62,7 @@ fn run(options: Options) -> anyhow::Result<()> {
 
     let intensities = char_intensities((32u8..127u8).map(|x| x as char), font)?;
     asciify(
-        out_buffer,
+        out_buffer.as_mut(),
         new_width,
         new_height,
         image,
@@ -69,6 +70,8 @@ fn run(options: Options) -> anyhow::Result<()> {
         options.contrast,
         options.gamma,
     )?;
+    // in case
+    out_buffer.flush()?;
 
     Ok(())
 }
