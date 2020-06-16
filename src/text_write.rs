@@ -10,7 +10,7 @@ pub enum TextWriteError {
     #[error("error while writing an image")]
     Image(#[from] image::error::ImageError),
     #[error("std::io error")]
-    StdIo(#[from] std::io::Error)
+    StdIo(#[from] std::io::Error),
 }
 
 pub trait TextWrite<T> {
@@ -26,9 +26,7 @@ pub struct StdTextWriter<T: Write> {
 }
 impl<T: Write> StdTextWriter<T> {
     pub fn new(writer: T) -> Self {
-        Self {
-            writer 
-        }
+        Self { writer }
     }
 }
 impl<T: Write> TextWrite<TextWriteError> for StdTextWriter<T> {

@@ -73,7 +73,7 @@ fn run(options: Options) -> anyhow::Result<()> {
     let data = std::fs::read(path).context("Failed to open the font file!")?;
     let font: Font = Font::try_from_vec(data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
-    let mut out_buffer: Box<dyn TextWrite<TextWriteError>> = match options.output_type {
+    let mut output_writer: Box<dyn TextWrite<TextWriteError>> = match options.output_type {
         OutputType::Text => Box::new(StdTextWriter::new(File::create(Path::new(
             &options.output_filename.unwrap(),
         ))?)),
@@ -97,7 +97,7 @@ fn run(options: Options) -> anyhow::Result<()> {
     };
     let intensities = char_intensities((32u8..127u8).map(|x| x as char), font)?;
     asciify(
-        out_buffer.as_mut(),
+        output_writer.as_mut(),
         new_width,
         new_height,
         image,
@@ -106,7 +106,7 @@ fn run(options: Options) -> anyhow::Result<()> {
         options.gamma,
     )?;
     // in case
-    out_buffer.flush()?;
+    output_writer.flush()?;
 
     Ok(())
 }

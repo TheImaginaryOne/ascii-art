@@ -1,6 +1,6 @@
+use crate::text_write::{TextWrite, TextWriteError};
 use image::imageops::FilterType;
 use ordered_float::OrderedFloat;
-use crate::text_write::{TextWrite, TextWriteError};
 
 use crate::intensity::{CharIntensities, Intensity};
 
@@ -15,7 +15,7 @@ fn avg_intensity(image: &image::GrayImage, x1: u32, y1: u32, x2: u32, y2: u32) -
 }
 
 pub fn asciify(
-    buffer: &mut dyn TextWrite<TextWriteError>,
+    writer: &mut dyn TextWrite<TextWriteError>,
     new_width: u32,
     new_height: u32,
     image: image::DynamicImage,
@@ -52,9 +52,9 @@ pub fn asciify(
                 .min_by_key(|(_, x)| OrderedFloat(a.distance(&x)))
                 .unwrap_or(&(' ', Intensity::default()))
                 .0; // todo
-            buffer.write_char(next_char)?;
+            writer.write_char(next_char)?;
         }
-        buffer.write_newline()?;
+        writer.write_newline()?;
     }
     Ok(())
 }
