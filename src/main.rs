@@ -90,7 +90,7 @@ fn run(options: Options) -> anyhow::Result<()> {
         let path = std::path::Path::new(font_filename);
         std::fs::read(path).context("Failed to open the font file!")?
     } else {
-        include_bytes!("font/SourceCodePro-Regular.otf").to_vec()
+        include_bytes!("font/LiberationMono-Regular.ttf").to_vec()
     };
     let font: Font = Font::try_from_vec(font_data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
