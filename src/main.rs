@@ -32,7 +32,7 @@ struct Options {
     #[structopt(short = "w", long)]
     output_width: u32,
     #[structopt(short = "f", long)]
-    font_filename: String,
+    font_filename: Option<String>,
     // the kebaba case is very important
     #[structopt(
         short,
@@ -69,9 +69,13 @@ fn run(options: Options) -> anyhow::Result<()> {
     let stdout = std::io::stdout();
 
     // TODO
-    let path = std::path::Path::new(&options.font_filename);
-    let data = std::fs::read(path).context("Failed to open the font file!")?;
-    let font: Font = Font::try_from_vec(data).ok_or(anyhow::anyhow!("Failed to load font"))?;
+    let font_data = if let Some(font_filename) = &options.font_filename {
+        let path = std::path::Path::new(font_filename);
+        std::fs::read(path).context("Failed to open the font file!")?
+    } else {
+        include_bytes!("font/SourceCodePro-Regular.otf").to_vec()
+    };
+    let font: Font = Font::try_from_vec(font_data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
     let mut output_writer: Box<dyn TextWrite<TextWriteError>> = match options.output_type {
         OutputType::Text => Box::new(StdTextWriter::new(File::create(Path::new(
