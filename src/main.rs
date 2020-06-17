@@ -22,24 +22,27 @@ arg_enum! {
     enum OutputType {
         Stdout,
         Text,
-        Png,
+        Image,
     }
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "image")]
+#[structopt(name = "asciiart")]
 struct Options {
     #[structopt(short = "i", long)]
     input_filename: String,
+    /// The output width in characters
     #[structopt(short = "w", long)]
     output_width: u32,
+    /// The font is used for computations
+    /// and display if the output is an image
     #[structopt(short = "f", long)]
     font_filename: Option<String>,
-    // the kebaba case is very important
+    // the kebab case is very important
     #[structopt(
         short,
         long,
-        required_if("output-type", "png"),
+        required_if("output-type", "image"),
         required_if("output-type", "text")
     )]
     output_filename: Option<String>,
@@ -48,10 +51,14 @@ struct Options {
 
     #[structopt(short = "s", long, default_value = "12.")]
     font_size: f32,
+    /// The width to height ratio of a single character, used for computations
     #[structopt(short = "a", long)]
     font_aspect: Option<f32>,
+    /// Higher values mean greater contrast
     #[structopt(short, long, default_value = "1.0")]
     contrast: f32,
+    /// The intensity of a pixel is modified according to the formula intensity^(gamma) where
+    /// the intensity is between 0 and 1
     #[structopt(short, long, default_value = "1.0")]
     gamma: f32,
     #[structopt(short = "x", long, parse(try_from_str = parse_rgb), default_value = "101010")]
@@ -100,7 +107,7 @@ fn run(options: Options) -> anyhow::Result<()> {
             &options.output_filename.unwrap(),
         ))?)),
         OutputType::Stdout => Box::new(StdTextWriter::new(stdout)),
-        OutputType::Png => {
+        OutputType::Image => {
             let scale = rusttype::Scale {
                 x: options.font_size,
                 y: options.font_size,
