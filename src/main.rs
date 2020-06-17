@@ -44,6 +44,10 @@ struct Options {
     #[structopt(short = "t", long, possible_values = &OutputType::variants(), case_insensitive = true)]
     output_type: OutputType,
 
+    #[structopt(short = "s", long, default_value = "12.")]
+    font_size: f32,
+    #[structopt(short = "a", long)]
+    font_aspect: Option<f32>,
     #[structopt(short, long, default_value = "1.0")]
     contrast: f32,
     #[structopt(short, long, default_value = "1.0")]
@@ -64,7 +68,7 @@ fn run(options: Options) -> anyhow::Result<()> {
         .context("Failed to open file!")?
         .decode()?;
     let new_width = options.output_width;
-    let new_height = (image.height() * new_width) / image.width() * 1 / 2; // todo aspect ratio??
+    let mut new_height = (image.height() * new_width) / image.width();
     println!("{} {}", new_width, new_height);
     let stdout = std::io::stdout();
 
@@ -77,13 +81,24 @@ fn run(options: Options) -> anyhow::Result<()> {
     };
     let font: Font = Font::try_from_vec(font_data).ok_or(anyhow::anyhow!("Failed to load font"))?;
 
+    let font_aspect = if let Some(a) = options.font_aspect {
+        a
+    } else {
+        let scale = rusttype::Scale { x: 12., y: 12. };
+        let width = font.glyph(' ').scaled(scale).h_metrics().advance_width;
+        width / 12.
+    };
+    new_height = (new_height as f32 * font_aspect) as u32;
     let mut output_writer: Box<dyn TextWrite<TextWriteError>> = match options.output_type {
         OutputType::Text => Box::new(StdTextWriter::new(File::create(Path::new(
             &options.output_filename.unwrap(),
         ))?)),
         OutputType::Stdout => Box::new(StdTextWriter::new(stdout)),
         OutputType::Png => {
-            let scale = rusttype::Scale { x: 12., y: 12. };
+            let scale = rusttype::Scale {
+                x: options.font_size,
+                y: options.font_size,
+            };
             Box::new(ImageTextWriter::new(
                 options.output_filename.unwrap(),
                 ImageOptions {
