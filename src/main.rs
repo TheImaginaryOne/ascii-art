@@ -1,5 +1,6 @@
 mod ascii_generation;
 mod intensity;
+mod colour_parse;
 mod text_write;
 
 use image::io::Reader;
@@ -13,6 +14,7 @@ use std::path::Path;
 
 use ascii_generation::asciify;
 use intensity::char_intensities;
+use colour_parse::parse_rgb;
 use text_write::{ImageOptions, ImageTextWriter, StdTextWriter, TextWrite, TextWriteError};
 
 arg_enum! {
@@ -52,6 +54,10 @@ struct Options {
     contrast: f32,
     #[structopt(short, long, default_value = "1.0")]
     gamma: f32,
+    #[structopt(short = "x", long, parse(try_from_str = parse_rgb), default_value = "101010")]
+    text_colour: [u8; 3],
+    #[structopt(short = "b", long, parse(try_from_str = parse_rgb), default_value = "fefefe")]
+    background_colour: [u8; 3],
 }
 
 fn main() {
@@ -108,8 +114,8 @@ fn run(options: Options) -> anyhow::Result<()> {
                     height: new_height,
                     line_height: scale.y * 1.,
                     // TODO customise
-                    text_colour: image::Rgb::from([235, 88, 52]),
-                    background_colour: image::Rgb::from([250, 250, 250]),
+                    text_colour: image::Rgb::from(options.text_colour),
+                    background_colour: image::Rgb::from(options.background_colour),
                 },
             ))
         }
